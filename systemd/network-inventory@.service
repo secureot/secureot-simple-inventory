@@ -1,0 +1,73 @@
+[Unit]
+Description=Inventario de red por MAC/fabricante (captura en vivo) en %i
+Documentation=https://maclookup.app/downloads/json-database
+After=network-online.target network-inventory-tune@%i.service
+Wants=network-online.target
+Requires=network-inventory-tune@%i.service
+BindsTo=sys-subsystem-net-devices-%i.device
+
+[Service]
+Type=exec
+
+# Usuario sin privilegios + solo las capabilities necesarias (nada de root).
+#   CAP_NET_RAW   -> abrir sockets AF_PACKET y capturar.
+#   CAP_NET_ADMIN -> poner la interfaz en modo promiscuo.
+User=netcap
+Group=netcap
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=yes
+
+# Config por defecto (sobrescribible). El '-' permite que el archivo no exista.
+EnvironmentFile=-/etc/default/network-inventory
+Environment=THREADS=4 FANOUT=hash SNAPLEN=64 BUFFER_SIZE=67108864 \
+            OUI_DB=/var/lib/network-inventory/mac-vendors-export.json \
+            OUTPUT=/var/lib/network-inventory/inventario-%i.csv
+WorkingDirectory=/var/lib/network-inventory
+
+ExecStart=/usr/local/bin/network_inventory \
+    --iface %i \
+    --oui-db ${OUI_DB} \
+    --threads ${THREADS} \
+    --fanout ${FANOUT} \
+    --snaplen ${SNAPLEN} \
+    --buffer-size ${BUFFER_SIZE} \
+    --output ${OUTPUT}
+
+# El inventario se escribe al terminar. Usamos SIGINT (no SIGTERM) para que el
+# handler de Ctrl-C corte limpio y vuelque el archivo en 'systemctl stop'.
+KillSignal=SIGINT
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=2
+
+# --- Endurecimiento (sandbox) ---
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/network-inventory
+RuntimeDirectory=network-inventory
+StateDirectory=network-inventory
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# AF_PACKET para capturar; AF_NETLINK/AF_UNIX para ioctls de interfaz de libpcap.
+# Si la captura no arranca, ampliar esta lista (p.ej. AF_INET).
+RestrictAddressFamilies=AF_PACKET AF_NETLINK AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
