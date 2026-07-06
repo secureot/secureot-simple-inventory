@@ -1,0 +1,18 @@
+[Unit]
+Description=Tuning de NIC para captura a alta tasa en %i
+Documentation=man:ethtool(8)
+After=network-pre.target sys-subsystem-net-devices-%i.device
+Wants=network-pre.target
+BindsTo=sys-subsystem-net-devices-%i.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Desactiva coalescing (GRO/LRO/GSO/TSO): junta paquetes y distorsiona la captura.
+# El prefijo '-' ignora fallos en NICs que no soportan algún toggle.
+ExecStart=-/bin/sh -c 'ethtool -K %i gro off lro off gso off tso off'
+# Lleva el ring RX al máximo soportado por la NIC.
+ExecStart=-/bin/sh -c 'ethtool -G %i rx "$(ethtool -g %i | awk "/Pre-set/{f=1} f&&/^RX:/{print \\$2; exit}")"'
+
+[Install]
+WantedBy=multi-user.target
