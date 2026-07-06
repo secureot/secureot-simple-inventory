@@ -1,0 +1,6 @@
+target/
+ejemplos/
+*.pcap
+*.pcapng
+*.xlsx
+.git/
