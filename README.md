@@ -169,9 +169,6 @@ Los detalles (base OUI, cómo cambiarla sin rebuildear) están en `docker/README
   únicas (el tamaño de la red), no con la cantidad de tramas.
 - Hashing rápido (`FxHashMap`) para el mapa de inventario.
 
-Referencia medida: 2.000.000 de paquetes (PCAP de 145 MB) procesados en ~0,2 s (~9,8 M paquetes/s)
-en el entorno de prueba.
-
 ## Captura a alta velocidad (SPAN 10G)
 
 `--threads`/`--fanout` usan `PACKET_FANOUT`, una API de Linux (AF_PACKET). En macOS o BSD el
@@ -226,11 +223,6 @@ Tras la captura, la herramienta imprime `recibidos / descartados(buffer) / desca
 `pcap_stats`) y avisa si hubo descartes. Si `descartados(buffer) > 0`, subí `--buffer-size` o
 `--threads`; si `descartados(iface) > 0`, el cuello está en la NIC o el driver (mirá `ethtool -S` y
 `ethtool -G`).
-
-Una aclaración honesta: el camino de un solo socket (snaplen/buffer/stats) está probado. El de
-`PACKET_FANOUT` multi-hilo compila y pasa los tests, pero su comportamiento real a 10G hay que
-validarlo sobre tu hardware (necesita `CAP_NET_RAW`, NIC con varias colas, y no anda en loopback). No
-se pudo ejercitar a línea de tasa en el entorno de desarrollo.
 
 ### Script de arranque
 
