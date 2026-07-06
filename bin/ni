@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Lanzador unificado. Corre el pipeline nativo o dentro de Docker, mismo comando:
+#   ni captura.pcap                 auto: nativo si está instalado, si no Docker
+#   ni --docker captura.pcap        forzar Docker
+#   ni --native captura.pcap        forzar nativo
+#   ni --pcap x.pcap --threads 4    modo avanzado (flags crudos de network_inventory)
+#
+# Variables: NI_MODE (auto|native|docker), NI_IMAGE, INCLUDE_MULTICAST, NO_XLSX, OUI_DB
+set -euo pipefail
+
+MODE="${NI_MODE:-auto}"
+IMAGE="${NI_IMAGE:-network-inventory:latest}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -m|--mode) MODE="$2"; shift 2 ;;
+        --docker)  MODE="docker"; shift ;;
+        --native)  MODE="native"; shift ;;
+        *) break ;;
+    esac
+done
+
+have_native() { command -v network_inventory >/dev/null 2>&1 || [ -x "./target/release/network_inventory" ]; }
+have_docker() { command -v docker >/dev/null 2>&1 && docker image inspect "$IMAGE" >/dev/null 2>&1; }
+
+if [ "$MODE" = "auto" ]; then
+    if have_native; then
+        MODE="native"
+    elif have_docker; then
+        MODE="docker"
+    else
+        echo "ni: no encuentro el binario nativo ni la imagen Docker '$IMAGE'." >&2
+        echo "    Instalá con ./install.sh, o construí la imagen:" >&2
+        echo "    docker build -f docker/Dockerfile -t network-inventory ." >&2
+        exit 1
+    fi
+fi
+
+case "$MODE" in
+    native)
+        exec "$here/pipeline.sh" "$@"
+        ;;
+    docker)
+        envs=()
+        [ -n "${INCLUDE_MULTICAST:-}" ] && envs+=(-e "INCLUDE_MULTICAST=$INCLUDE_MULTICAST")
+        [ -n "${NO_XLSX:-}" ]           && envs+=(-e "NO_XLSX=$NO_XLSX")
+        [ -n "${OUI_DB:-}" ]            && envs+=(-e "OUI_DB=$OUI_DB")
+        exec docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$PWD:/data" -w /data \
+            "${envs[@]}" \
+            "$IMAGE" "$@"
+        ;;
+    *)
+        echo "ni: modo desconocido '$MODE' (usá auto, native o docker)" >&2
+        exit 1
+        ;;
+esac
